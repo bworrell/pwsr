@@ -10,7 +10,7 @@
 *.settings
 
 # pycharm
-.idea/ 
+.idea
 
 # python setuptools
 build/

@@ -354,11 +354,23 @@ class PWSafeDB(object):
         self.l = l
 
     def __getitem__(self, item):
+        # first we'll try to find the exact record
         for record in self.records:
             if record.title == item:
                 return record
 
+        results = self.search(item)
+        if results:
+            return results[0]
+
         return None
+
+    def search(self, key):
+        records = []
+        for record in self.records:
+            if key.lower() in record.title.value.lower():
+                records.append(record)
+        return records
 
 
     def __str__(self):

@@ -66,6 +66,17 @@ class PwSafeV3Field(object):
         data = struct.pack(fmt, (self.length, self.type_, (self.value + self.padding)))
         return data
 
+    def __eq__(self, other):
+        if self is other:
+            return True
+
+        if isinstance(other, basestring):
+            return self.value == other
+        elif isinstance(other, PwSafeV3Field):
+            return self.value == other.value
+        else:
+            return False
+
     def __repr__(self):
         return  str(self.__dict__)
 
@@ -115,7 +126,7 @@ class PWSafeV3Header(object):
     '''
 
     def __init__(self):
-        self._fields = {}
+        self.fields = {}
 
     @classmethod
     def parse(cls, data, offset=0):
@@ -131,17 +142,17 @@ class PWSafeV3Header(object):
         return obj
 
     def __setitem__(self, key, value):
-        self._fields[key] = value
+        self.fields[key] = value
 
     def __getitem__(self, item):
-        return self._fields.get(item)
+        return self.fields.get(item)
 
     def __len__(self):
-        return sum(f.raw_length for f in self._fields.itervalues())
+        return sum(f.raw_length for f in self.fields.itervalues())
 
     def __str__(self):
         s = ""
-        for k, v in self._fields.iteritems():
+        for k, v in self.fields.iteritems():
             s += "%s: %s\n" % (k, str(v))
         return s
 
@@ -183,7 +194,7 @@ class PWSafeV3Record(object):
         self.password = None
 
         # used for type lookups and __len__ calculations
-        self._fields = {}
+        self.fields = {}
 
     @classmethod
     def parse(cls, data, offset=0):
@@ -207,13 +218,13 @@ class PWSafeV3Record(object):
         return obj
 
     def __setitem__(self, key, value):
-        self._fields[key] = value
+        self.fields[key] = value
 
     def __getitem__(self, item):
-        return self._fields.get(item)
+        return self.fields.get(item)
 
     def __len__(self):
-        return sum(f.raw_length for f in self._fields.itervalues())
+        return sum(f.raw_length for f in self.fields.itervalues())
 
     def __repr__(self):
         return str(self.__dict__)
@@ -341,6 +352,13 @@ class PWSafeDB(object):
         self.pp = pp
         self.k = k
         self.l = l
+
+    def __getitem__(self, item):
+        for record in self.records:
+            if record.title == item:
+                return record
+
+        return None
 
 
     def __str__(self):

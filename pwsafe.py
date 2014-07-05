@@ -1,5 +1,6 @@
 __author__ = 'bworrell'
 
+import os
 import hashlib
 import struct
 import hmac
@@ -20,13 +21,8 @@ class PwSafeV3Field(object):
     HEADER_SIZE = 5 # 4 Bytes (data length) + 1 byte (field type)
 
     def __init__(self):
-        self.data_length = 0 # length of the field data
-        self.raw_length = 0 # length of the field itself, including field header
-        self.num_blocks = 0 # number of cipher blocks required for field
         self.type_ = 0 # field type
-        self.raw_value = None # field value including padding
         self.value = None # field value without padding
-        self.padding = None # field value padding if present
 
     @classmethod
     def parse(cls, data, offset=0):
@@ -38,21 +34,16 @@ class PwSafeV3Field(object):
             data.seek(offset)
             dataio = data
 
-        obj.data_length = struct.unpack('<l', dataio.read(4))[0]
-        field_length = obj.data_length + 5 # 4 bytes (data length) + 1 byte (field type) + N bytes (data)
-
-        if (field_length) > BLOCK_SIZE:
-            obj.num_blocks = field_length / BLOCK_SIZE + (1 if field_length % BLOCK_SIZE else 0)
-        else:
-            obj.num_blocks = 1
-
+        data_len = struct.unpack('<l', dataio.read(4))[0]
         obj.type_ = ord(dataio.read(1))
-        obj.raw_length = BLOCK_SIZE * obj.num_blocks
-        obj.raw_value = dataio.read(obj.raw_length)
-        obj.value = obj.raw_value[:obj.data_length]
-        obj.padding = obj.raw_value[obj.data_length:]
+        obj.value = dataio.read(data_len)
 
         return obj
+
+    @property
+    def padding(self):
+        bufsize = len(self) - len(self.value)
+        return os.urandom(bufsize)
 
     def serialize(self):
         '''Writes out a field with the following format:
@@ -62,20 +53,16 @@ class PwSafeV3Field(object):
         VALUE: n * BLOCK_SIZE string
 
         '''
-        fmt= "<lB%ss" % (self.num_blocks * BLOCK_SIZE)
-        data = struct.pack(fmt, (self.length, self.type_, (self.value + self.padding)))
+        fmt= "<lB%ss" % (len(self))
+        data = struct.pack(fmt, (len(self.value), self.type_, (self.type_ + self.padding)))
         return data
 
     def __eq__(self, other):
         if self is other:
             return True
 
-        if isinstance(other, basestring):
-            return self.value == other
-        elif isinstance(other, PwSafeV3Field):
-            return self.value == other.value
-        else:
-            return False
+        return str(self) == str(other)
+
 
     def __repr__(self):
         return  str(self.__dict__)
@@ -148,7 +135,7 @@ class PWSafeV3Header(object):
         return self.fields.get(item)
 
     def __len__(self):
-        return sum(f.raw_length for f in self.fields.itervalues())
+        return sum(len(f) for f in self.fields.itervalues())
 
     def __str__(self):
         s = ""
@@ -212,7 +199,7 @@ class PWSafeV3Record(object):
                 obj.password = field
 
             obj[field.type_] = field
-            offset += field.raw_length
+            offset += len(field)
             type_ = field.type_
 
         return obj
@@ -224,7 +211,7 @@ class PWSafeV3Record(object):
         return self.fields.get(item)
 
     def __len__(self):
-        return sum(f.raw_length for f in self.fields.itervalues())
+        return sum(len(f) for f in self.fields.itervalues())
 
     def __repr__(self):
         return str(self.__dict__)

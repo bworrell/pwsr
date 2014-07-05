@@ -365,6 +365,11 @@ class PWSafeDB(object):
 
         return None
 
+    def __iter__(self):
+        for record in self.records:
+            yield record.title
+
+
     def search(self, key):
         records = []
         for record in self.records:

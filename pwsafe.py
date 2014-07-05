@@ -63,10 +63,6 @@ class PwSafeV3Field(object):
 
         return str(self) == str(other)
 
-
-    def __repr__(self):
-        return  str(self.__dict__)
-
     def __str__(self):
         return self.value
 
@@ -233,9 +229,6 @@ class PWSafeV3Record(object):
 
     def __len__(self):
         return sum(len(f) for f in self.fields.itervalues())
-
-    def __repr__(self):
-        return str(self.__dict__)
 
     def __str__(self):
         return "[%s] u: %s p: %s" % (self.title, self.username, self.password)

@@ -1,0 +1,1 @@
+from pwsr.version import __version__

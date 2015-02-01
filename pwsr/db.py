@@ -1,72 +1,118 @@
-__author__ = 'bworrell'
-
 import os
+import collections
 import hashlib
 import struct
 import hmac
 from hmac import HMAC
 from StringIO import StringIO
 from mcrypt import MCRYPT
+import errors
 
-BLOCK_SIZE = 16 # 16 Byte blocks for Twofish
-MODE_CBC = 'cbc'
-MODE_ECB = 'ecb'
+__builtin_type = type
+
+BLOCK_SIZE = 16   # 16 Byte blocks for Twofish
+MODE_CBC = 'cbc'  # Cipher Block Chaining
+MODE_ECB = 'ecb'  # Electronic Code Book
 
 TYPE_END = 0xff
 
-class PasswordError(Exception):
-    pass
-
 class PwSafeV3Field(object):
+    """Defines fields and operations for a Password Safe v3 Field
+
+    Attributes:
+        type: Fill Out
+        value: Fill Out
+
+    """
     HEADER_SIZE = 5 # 4 Bytes (data length) + 1 byte (field type)
 
     def __init__(self):
-        self.type_ = 0 # field type
+        self.type = 0 # field type
         self.value = None # field value without padding
+
 
     @classmethod
     def parse(cls, data, offset=0):
+        """Parses `data` at `offset` and returns a PwSafeV3Field instance.
+
+        Args:
+            data: A file-like object (``read()``) or an indexed object
+                (``list``) containing PwSafeV3Field data.
+            offset: The offset of `data` which points to the start of the
+                PwSafe v3 Field data.
+
+        Returns:
+            An instance of ``PwSafeV3Field``.
+
+        """
         obj = cls()
 
-        if not hasattr(data, "read"):
-            dataio = StringIO(data[offset:])
-        else:
+        try:
             data.seek(offset)
             dataio = data
+        except AttributeError:
+            dataio = StringIO(data[offset:])
 
         data_len = struct.unpack('<l', dataio.read(4))[0]
-        obj.type_ = ord(dataio.read(1))
+        obj.type = ord(dataio.read(1))
         obj.value = dataio.read(data_len)
 
         return obj
 
     @property
     def padding(self):
+        """Property for field padding.
+
+        Returns:
+            Random bytes which can be appended to `self.value` so that
+            ``(len(HEADER) + len(PADDING) + len(VALUE)) % BLOCK_SIZE == 0``.
+
+        """
         bufsize = len(self) - len(self.value)
         return os.urandom(bufsize)
 
     def serialize(self):
-        '''Writes out a field with the following format:
+        """Returns a binary Password Safe v3 Field.
+
+        Field format: [LENGTH][TYPE][VALUE][PADDING]
 
         LENGTH : 4 byte LE integer
         TYPE: 1 byte
-        VALUE: n * BLOCK_SIZE string
+        VALUE: Variable length string
+        PADDING: Random bytes where
+                 (len(HEADER) + len(PADDING) + len(VALUE)) % BLOCK_SIZE == 0
 
-        '''
-        fmt= "<lB%ss" % (len(self))
-        data = struct.pack(fmt, (len(self.value), self.type_, (self.type_ + self.padding)))
-        return data
+        Returns:
+            Packed binary form of this Password Safe v3 Field.
+        """
+        fmt = "<lB%ss" % (len(self))
+        data = self.value + self.padding
+        return  struct.pack(fmt, (len(self.value), self.type, data))
 
     def __eq__(self, other):
+        """Returns True if `self` and `other` are the same instance or if they
+        are both instances of ``PwSafeV3Field`` and have the same ``str()``
+        representation (or, ``value`` attribute.
+
+        """
         if self is other:
             return True
+        elif not (self.__class__ is other.__class__):
+            return False
+        else:
+            return str(self) == str(other)
 
-        return str(self) == str(other)
+    def __unicode__(self):
+        return unicode(self.value)
 
     def __str__(self):
-        return self.value
+        return unicode(self).encode('utf-8')
 
     def __len__(self):
+        """Returns the length of the field, which is a multiple of
+        `BLOCK_SIZE`.
+
+        """
         length = PwSafeV3Field.HEADER_SIZE + len(self.value)
 
         if length < BLOCK_SIZE:
@@ -79,8 +125,7 @@ class PwSafeV3Field(object):
         return (BLOCK_SIZE * q)
 
 
-
-class PWSafeV3Header(object):
+class PWSafeV3Header(collections.MutableMapping):
     '''
                                                       Currently
     Name                        Value        Type    Implemented      Comments
@@ -107,60 +152,68 @@ class PWSafeV3Header(object):
     End of Entry                0xff        [empty]       Y              [17]
 
     '''
-
-    TYPE_VERSION = 0x00
-    TYPE_UUID = 0x01
-    TYPE_NON_DEFAULT_PARAMS = 0x02
-    TYPE_TREE_DISPLAY_STATUS = 0x03
-    TYPE_TIMESTAMP_LAST_SAVE = 0x04
-    TYPE_WHO_LAST_SAVE = 0x05
-    TYPE_WHAT_LAST_SAVE = 0x06
-    TYPE_LAST_SAVE_USER = 0x07
-    TYPE_LAST_SAVE_HOST = 0x08
-    TYPE_DATABASE_NAME = 0x09
-    TYPE_DATABASE_DESC = 0x0a
-    TYPE_DATABASE_FILTERS = 0x0b
-    TYPE_RESERVED_1 = 0x0c
-    TYPE_RESERVED_2 = 0x0d
-    TYPE_RESERVED_3 = 0x0e
-    TYPE_RECENTLY_USED_ENTRIES = 0x0f
-    TYPE_NAMED_PASSWORD_POLICIES = 0x10
-    TYPE_EMPTY_GROUPS = 0x11
-    TYPE_RESERVED_4 = 0x12
-    TYPE_END = 0xff
+    TYPE_VERSION                    = 0x00
+    TYPE_UUID                       = 0x01
+    TYPE_NON_DEFAULT_PARAMS         = 0x02
+    TYPE_TREE_DISPLAY_STATUS        = 0x03
+    TYPE_TIMESTAMP_LAST_SAVE        = 0x04
+    TYPE_WHO_LAST_SAVE              = 0x05
+    TYPE_WHAT_LAST_SAVE             = 0x06
+    TYPE_LAST_SAVE_USER             = 0x07
+    TYPE_LAST_SAVE_HOST             = 0x08
+    TYPE_DATABASE_NAME              = 0x09
+    TYPE_DATABASE_DESC              = 0x0a
+    TYPE_DATABASE_FILTERS           = 0x0b
+    TYPE_RESERVED_1                 = 0x0c
+    TYPE_RESERVED_2                 = 0x0d
+    TYPE_RESERVED_3                 = 0x0e
+    TYPE_RECENTLY_USED_ENTRIES      = 0x0f
+    TYPE_NAMED_PASSWORD_POLICIES    = 0x10
+    TYPE_EMPTY_GROUPS               = 0x11
+    TYPE_RESERVED_4                 = 0x12
+    TYPE_END                        = 0xff
 
     def __init__(self):
-        self.fields = {}
+        self.__fields = {}
 
     @classmethod
     def parse(cls, data, offset=0):
         obj = cls()
-        type_ = None
+        type = None
 
-        while type_ != TYPE_END:
+        while type != TYPE_END:
             field = PwSafeV3Field.parse(data, offset)
-            type_ = field.type_
-            obj[type_] = field
+            type = field.type
+            obj[type] = field
             offset += len(field)
 
         return obj
 
     def __setitem__(self, key, value):
-        self.fields[key] = value
+        self.__fields[key] = value
 
     def __getitem__(self, item):
-        return self.fields.get(item)
+        return self.__fields.get(item)
+
+    def __delitem__(self, key):
+        return self.__fields.__delitem__(key)
+
+    def __iter__(self):
+        return self.__fields.__iter__()
 
     def __len__(self):
-        return sum(len(f) for f in self.fields.itervalues())
+        return sum(len(v) for v in self.itervalues())
+
+    def __unicode__(self):
+        fmt = "%s: %s"
+        s = "\n".join(fmt.format(k, str(v)) for k, v in self.iteritems())
+        return unicode(s)
 
     def __str__(self):
-        s = ""
-        for k, v in self.fields.iteritems():
-            s += "%s: %s\n" % (k, str(v))
-        return s
+        return unicode(self).encode('utf-8')
 
-class PWSafeV3Record(object):
+
+class PWSafeV3Record(collections.MutableMapping):
     '''
     UUID                        0x01        UUID          Y              [1]
     Group                       0x02        Text          Y              [2]
@@ -198,40 +251,51 @@ class PWSafeV3Record(object):
         self.password = None
 
         # used for type lookups and __len__ calculations
-        self.fields = {}
+        self.__fields = {}
 
     @classmethod
     def parse(cls, data, offset=0):
-        obj = cls()
-        type_ = None
+        record = cls()
+        type = None
 
-        while type_ != TYPE_END:
+        while type != TYPE_END:
             field = PwSafeV3Field.parse(data, offset)
 
-            if field.type_ == cls.TYPE_TITLE:
-                obj.title = field
-            elif field.type_ == cls.TYPE_USERNAME:
-                obj.username = field
-            elif field.type_ == cls.TYPE_PASSWORD:
-                obj.password = field
+            if field.type == cls.TYPE_TITLE:
+                record.title = field
+            elif field.type == cls.TYPE_USERNAME:
+                record.username = field
+            elif field.type == cls.TYPE_PASSWORD:
+                record.password = field
 
-            obj[field.type_] = field
+            record[field.type] = field
             offset += len(field)
-            type_ = field.type_
+            type = field.type
 
-        return obj
+        return record
 
     def __setitem__(self, key, value):
-        self.fields[key] = value
+        self.__fields[key] = value
 
     def __getitem__(self, item):
-        return self.fields.get(item)
+        return self.__fields.get(item)
+
+    def __delitem__(self, key):
+        return self.__fields.__delitem__(key)
+
+    def __iter__(self):
+        return self.__fields.__iter__()
 
     def __len__(self):
-        return sum(len(f) for f in self.fields.itervalues())
+        return sum(len(f) for f in self.itervalues())
+
+    def __unicode__(self):
+        s = "[%s] u: %s p: %s" % (self.title, self.username, self.password)
+        return unicode(s)
 
     def __str__(self):
-        return "[%s] u: %s p: %s" % (self.title, self.username, self.password)
+        return unicode(self).encode('utf=8')
+
 
 class PWSafeV3PreHeader(object):
     def __init__(self):
@@ -249,29 +313,32 @@ class PWSafeV3PreHeader(object):
     def parse(cls, data):
         obj = cls()
 
-        if not hasattr(data, "read"):
-            dataio = StringIO(data)
-        else:
+        try:
             data.seek(0)
-            dataio = data
+        except AttributeError:
+            data = StringIO(data)
 
-        obj.tag = dataio.read(4)
-        obj.salt = dataio.read(32)
-        obj.iter_ = struct.unpack("<l", dataio.read(4))[0]
-        obj.hpp = dataio.read(32)
-        obj.b1 = dataio.read(16)
-        obj.b2 = dataio.read(16)
-        obj.b3 = dataio.read(16)
-        obj.b4 = dataio.read(16)
-        obj.iv = dataio.read(16)
+        obj.tag     = data.read(4)
+        obj.salt    = data.read(32)
+        obj.iter    = struct.unpack("<l", data.read(4))[0]
+        obj.hpp     = data.read(32)
+        obj.b1      = data.read(16)
+        obj.b2      = data.read(16)
+        obj.b3      = data.read(16)
+        obj.b4      = data.read(16)
+        obj.iv      = data.read(16)
 
         return obj
 
     def __len__(self):
         return  (4+32+4+32+(16*4)+16)
 
+    def __unicode__(self):
+        return unicode(self.__dict__)
+
     def __str__(self):
-        return str(self.__dict__)
+        return unicode(self).encode('utf-8')
+
 
 class PWSafeDB(object):
     EOF_MARKER =  "PWS3-EOFPWS3-EOF"
@@ -282,7 +349,6 @@ class PWSafeDB(object):
         self.header = None
         self.records = []
         self.hmac = None
-
         self.pp = None # P'
         self.k = None
         self.l = None
@@ -316,27 +382,33 @@ class PWSafeDB(object):
     def _decrypt_data_section(self, data, iv, k):
         ieof = data.rindex(PWSafeDB.EOF_MARKER)
         ciphertext = data[PWSafeDB.HDR_OFFSET:ieof]
-        data_section = self._decrypt(ciphertext, k, iv, mode=MODE_CBC) # CBC required for
-                                                                 #  decryption
-        return data_section
+        return self._decrypt(ciphertext, k, iv, mode=MODE_CBC)
+
+    def _get_hmac(self, data):
+        start = data.rindex(self.EOF_MARKER) + len(self.EOF_MARKER)
+        end = start + 32
+        return data[start:end]
 
     def parse(self, db, key):
         '''Parses a PWSafe v3 database file.'''
         try:
+            db.seek(0)
             data = db.read()
         except AttributeError:
             data = db
 
-        preheader = PWSafeV3PreHeader.parse(data)
+        ph = PWSafeV3PreHeader.parse(data)
+        pp = self._stretch_key(key, ph.salt, ph.iter)
 
-        pp = self._stretch_key(key, preheader.salt, preheader.iter_)
-        if not self. _check_password(pp, preheader.hpp):
-            raise PasswordError("Incorrect password")
+        if not self. _check_password(pp, ph.hpp):
+            raise errors.InvalidPasswordError("Incorrect password")
 
-        k = self._decrypt(preheader.b1, pp) + self._decrypt(preheader.b2, pp) # decrypt data
-        l = self._decrypt(preheader.b3, pp) + self._decrypt(preheader.b4, pp) # used for hmac
+        k = self._decrypt(ph.b1, pp) + self._decrypt(ph.b2, pp) # decrypt data
+        l = self._decrypt(ph.b3, pp) + self._decrypt(ph.b4, pp) # used for hmac
 
-        udata = self._decrypt_data_section(data, preheader.iv, k) # decrypted data section
+        hmac = self._get_hmac(data)
+        udata = self._decrypt_data_section(data, ph.iv, k) # decrypted data section
+
         header = PWSafeV3Header.parse(udata)
         offset = len(header)
 
@@ -346,10 +418,10 @@ class PWSafeDB(object):
             records.append(record)
             offset += len(record)
 
-        self.preheader = preheader
+        self.preheader = ph
         self.header = header
         self.records = records
-        #self.hmac = hmac_
+        #self.hmac = hmac
         self.pp = pp
         self.k = k
         self.l = l
@@ -370,14 +442,12 @@ class PWSafeDB(object):
         for record in self.records:
             yield record.title
 
-
     def search(self, key):
         records = []
         for record in self.records:
-            if key.lower() in record.title.value.lower():
+            if key.lower() in str(record.title).lower():
                 records.append(record)
         return records
-
 
     def __str__(self):
         s = ""

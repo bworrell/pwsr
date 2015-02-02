@@ -24,11 +24,11 @@ class PwSafeV3Field(object):
         value: Fill Out
 
     """
-    HEADER_SIZE = 5 # 4 Bytes (data length) + 1 byte (field type)
+    HEADER_SIZE = 5  # 4 Bytes (data length) + 1 byte (field type)
 
     def __init__(self):
-        self.type = 0 # field type
-        self.value = None # field value without padding
+        self.type = 0  # field type
+        self.value = None  # field value without padding
 
 
     @classmethod
@@ -84,6 +84,7 @@ class PwSafeV3Field(object):
 
         Returns:
             Packed binary form of this Password Safe v3 Field.
+
         """
         fmt = "<lB%ss" % (len(self))
         data = self.value + self.padding
@@ -290,7 +291,12 @@ class PWSafeV3Record(collections.MutableMapping):
         return sum(len(f) for f in self.itervalues())
 
     def __unicode__(self):
-        s = "[%s] u: %s p: %s" % (self.title, self.username, self.password)
+        s = "[{0}] u: {1} p: {2}".format(
+            self.title,
+            self.username,
+            self.password
+        )
+
         return unicode(s)
 
     def __str__(self):
@@ -400,7 +406,7 @@ class PWSafeDB(object):
         ph = PWSafeV3PreHeader.parse(data)
         pp = self._stretch_key(key, ph.salt, ph.iter)
 
-        if not self. _check_password(pp, ph.hpp):
+        if not self._check_password(pp, ph.hpp):
             raise errors.InvalidPasswordError("Incorrect password")
 
         k = self._decrypt(ph.b1, pp) + self._decrypt(ph.b2, pp) # decrypt data
@@ -450,9 +456,8 @@ class PWSafeDB(object):
         return records
 
     def __str__(self):
-        s = ""
-        s += str(self.preheader) + "\n"
-        s += str(self.header) + "\n"
-        for record in self.records:
-            s += str(record) + "\n"
+        s = str(self.preheader) + "\n"
+        s = s + str(self.header) + "\n"
+        s = s + "\n".join(str(x) for x in self.records)
+
         return s

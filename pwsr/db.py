@@ -1,12 +1,17 @@
+# builtin
 import os
 import collections
 import hashlib
 import struct
 import hmac
-from hmac import HMAC
-from StringIO import StringIO
-from mcrypt import MCRYPT
-import errors
+import StringIO
+
+# external
+import mcrypt
+
+# internal
+from . import errors, utils
+
 
 __builtin_type = type
 
@@ -46,12 +51,7 @@ class PwSafeV3Field(object):
 
         """
         obj = cls()
-
-        try:
-            data.seek(offset)
-            dataio = data
-        except AttributeError:
-            dataio = StringIO(data[offset:])
+        dataio = utils.ioslice(data, offset)
 
         data_len = struct.unpack('<l', dataio.read(4))[0]
         obj.type = ord(dataio.read(1))
@@ -127,7 +127,7 @@ class PwSafeV3Field(object):
 
 
 class PWSafeV3Header(collections.MutableMapping):
-    '''
+    """
                                                       Currently
     Name                        Value        Type    Implemented      Comments
     --------------------------------------------------------------------------
@@ -152,7 +152,7 @@ class PWSafeV3Header(collections.MutableMapping):
     Reserved                    0x12        Text                         [13]
     End of Entry                0xff        [empty]       Y              [17]
 
-    '''
+    """
     TYPE_VERSION                    = 0x00
     TYPE_UUID                       = 0x01
     TYPE_NON_DEFAULT_PARAMS         = 0x02
@@ -215,7 +215,7 @@ class PWSafeV3Header(collections.MutableMapping):
 
 
 class PWSafeV3Record(collections.MutableMapping):
-    '''
+    """
     UUID                        0x01        UUID          Y              [1]
     Group                       0x02        Text          Y              [2]
     Title                       0x03        Text          Y
@@ -241,7 +241,7 @@ class PWSafeV3Record(collections.MutableMapping):
     Shift Double-Click Action   0x17        2 bytes       Y              [15]
     Password Policy Name        0x18        Text          Y              [19]
     End of Entry
-    '''
+    """
     TYPE_TITLE      = 0x03
     TYPE_USERNAME   = 0x04
     TYPE_PASSWORD   = 0x06
@@ -318,11 +318,7 @@ class PWSafeV3PreHeader(object):
     @classmethod
     def parse(cls, data):
         obj = cls()
-
-        try:
-            data.seek(0)
-        except AttributeError:
-            data = StringIO(data)
+        data = utils.ioslice(data, offset=0)
 
         obj.tag     = data.read(4)
         obj.salt    = data.read(32)
@@ -380,7 +376,7 @@ class PWSafeDB(object):
         return digest
 
     def _decrypt(self, data, key, iv=None, mode=MODE_ECB):
-        twofish = MCRYPT('twofish', mode)
+        twofish = mcrypt.MCRYPT('twofish', mode)
         twofish.init(key, iv)
         plaintext = twofish.decrypt(data)
         return plaintext
@@ -388,22 +384,23 @@ class PWSafeDB(object):
     def _decrypt_data_section(self, data, iv, k):
         ieof = data.rindex(PWSafeDB.EOF_MARKER)
         ciphertext = data[PWSafeDB.HDR_OFFSET:ieof]
-        return self._decrypt(ciphertext, k, iv, mode=MODE_CBC)
+        plaintext  = self._decrypt(ciphertext, k, iv, mode=MODE_CBC)
+
+        return plaintext
 
     def _get_hmac(self, data):
         start = data.rindex(self.EOF_MARKER) + len(self.EOF_MARKER)
         end = start + 32
-        return data[start:end]
+        hmac_slice = data[start:end]
+
+        return hmac_slice
 
     def parse(self, db, key):
-        '''Parses a PWSafe v3 database file.'''
-        try:
-            db.seek(0)
-            data = db.read()
-        except AttributeError:
-            data = db
+        """Parses a PWSafe v3 database file."""
+        data = utils.ioslice(db, offset=0)
+        bindata = utils.bindata(data)
 
-        ph = PWSafeV3PreHeader.parse(data)
+        ph = PWSafeV3PreHeader.parse(bindata)
         pp = self._stretch_key(key, ph.salt, ph.iter)
 
         if not self._check_password(pp, ph.hpp):
@@ -412,8 +409,8 @@ class PWSafeDB(object):
         k = self._decrypt(ph.b1, pp) + self._decrypt(ph.b2, pp) # decrypt data
         l = self._decrypt(ph.b3, pp) + self._decrypt(ph.b4, pp) # used for hmac
 
-        hmac = self._get_hmac(data)
-        udata = self._decrypt_data_section(data, ph.iv, k) # decrypted data section
+        hmac = self._get_hmac(bindata)
+        udata = self._decrypt_data_section(bindata, ph.iv, k) # decrypted data section
 
         header = PWSafeV3Header.parse(udata)
         offset = len(header)
@@ -433,16 +430,12 @@ class PWSafeDB(object):
         self.l = l
 
     def __getitem__(self, item):
-        # first we'll try to find the exact record
         for record in self.records:
             if record.title == item:
                 return record
 
-        results = self.search(item)
-        if results:
-            return results[0]
-
-        return None
+        error = "Unable to find entry for '{0}'".format(item)
+        raise KeyError(error)
 
     def __iter__(self):
         for record in self.records:
@@ -461,3 +454,12 @@ class PWSafeDB(object):
         s = s + "\n".join(str(x) for x in self.records)
 
         return s
+
+
+def parsedb(dbfn, dbpw):
+    pwsafe = PWSafeDB()
+    
+    with open(dbfn, 'rb') as database:
+        pwsafe.parse(database, dbpw)
+
+    return pwsafe

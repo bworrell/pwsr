@@ -50,13 +50,13 @@ extras_require = {
 
 setup(
     name='pwsafe-remote',
-    description='Password Safe Remote: Syncs Password Safe over Google Documents',
+    description='Password Safe Remote: Syncs PasswordSafe over Google Documents',
     author='Bryan Worrell',
     author_email='',
     url='https://github.com/bworrell',
     version=get_version(),
     packages=find_packages(),
-    scripts=['pwsr/scripts/pwsafe-remote.py'],
+    scripts=['pwsr/scripts/pwsr-get.py', 'pwsr/scripts/pwsr-search.py'],
     include_package_data=True,
     install_requires=install_requires,
     extras_require=extras_require,

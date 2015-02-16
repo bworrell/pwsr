@@ -439,7 +439,7 @@ class PWSafeDB(object):
 
     def __iter__(self):
         for record in self.records:
-            yield record.title
+            yield record
 
     def search(self, key):
         records = []
@@ -458,7 +458,7 @@ class PWSafeDB(object):
 
 def parsedb(dbfn, dbpw):
     pwsafe = PWSafeDB()
-    
+
     with open(dbfn, 'rb') as database:
         pwsafe.parse(database, dbpw)
 

@@ -99,7 +99,7 @@ def main():
         validate_params(argparser, dbfn=dbfn, dbpw=dbpw, key=key, args=args)
 
         # Parse the pwsafe database
-        pwsafe = db.parsedb(dbfn, dbpw)
+        pwsafe = db.parse(dbfn, dbpw)
 
         if args.list:
             scripts.print_records(pwsafe, hide)

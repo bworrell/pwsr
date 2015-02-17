@@ -307,6 +307,7 @@ class PWSafeV3Record(collections.MutableMapping):
         return unicode(self).encode('utf=8')
 
 
+
 class PWSafeV3PreHeader(object):
     def __init__(self):
         self.tag = None
@@ -433,9 +434,26 @@ class PWSafeDB(object):
         self.k = k
         self.l = l
 
+    def search(self, key):
+        records = []
+        for record in self.records:
+            if key.lower() in str(record.title).lower():
+                records.append(record)
+        return records
+
+    def groupby(self, key='group'):
+        grouped = collections.defaultdict(list)
+
+        for record in self:
+            field = getattr(record, key)
+            groupkey = str(field)
+            grouped[groupkey].append(record)
+
+        return grouped
+
     def __getitem__(self, item):
         for record in self.records:
-            if record.title == item:
+            if str(record.title) == item:
                 return record
 
         error = "Unable to find entry for '{0}'".format(item)
@@ -445,13 +463,6 @@ class PWSafeDB(object):
         for record in self.records:
             yield record
 
-    def search(self, key):
-        records = []
-        for record in self.records:
-            if key.lower() in str(record.title).lower():
-                records.append(record)
-        return records
-
     def __str__(self):
         s = str(self.preheader) + "\n"
         s = s + str(self.header) + "\n"
@@ -460,7 +471,7 @@ class PWSafeDB(object):
         return s
 
 
-def parsedb(dbfn, dbpw):
+def parse(dbfn, dbpw):
     pwsafe = PWSafeDB()
 
     with open(dbfn, 'rb') as database:

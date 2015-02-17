@@ -1,5 +1,6 @@
 # builtin
 import os
+import collections
 import contextlib
 import StringIO
 
@@ -77,10 +78,3 @@ def find_record(pwsafe, key, multiple=False):
     error = "The PWSafe did not contain an entry for '{0}'".format(key)
     raise errors.KeyLookupError(message=error, key=key)
 
-
-def find_group(pwsafe, group):
-    """Attempts to find all records which belong to the input 1group`
-    name.
-
-
-    """

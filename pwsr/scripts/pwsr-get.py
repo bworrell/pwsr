@@ -3,7 +3,7 @@
 # builtin
 import sys
 import argparse
-import json
+import collections
 
 # external
 import pyperclip
@@ -37,6 +37,14 @@ def get_arg_parser():
     )
 
     parser.add_argument(
+        "--hide",
+        dest="hide",
+        default=False,
+        action="store_true",
+        help="Replace password with *'s"
+    )
+
+    parser.add_argument(
         "--list",
         dest="list",
         default=False,
@@ -67,23 +75,6 @@ def validate_params(argparser, **kwargs):
         raise scripts.ArgumentError(error, show_help=True)
 
 
-def print_record(record):
-    title = record.title
-    username = record.username
-    password = record.password
-
-    pwstr = "*" * len(password)
-    out = "[{0}] [{1}] [{2}]"
-    out = out.format(title, username, pwstr)
-
-    print out
-
-
-def print_records(records):
-    for record in records:
-        print_record(record)
-
-
 def clip_password(password):
     pyperclip.copy(str(password))
 
@@ -101,6 +92,7 @@ def main():
     dbfn    = utils.abspath(dbfn)
     dbpw    = args.dbpw or config.get('PWDB_KEY')
     key     = args.key
+    hide    = args.hide
 
     try:
         # Attempt to validate input parameters
@@ -110,11 +102,11 @@ def main():
         pwsafe = db.parsedb(dbfn, dbpw)
 
         if args.list:
-            print_records(pwsafe)
+            scripts.print_records(pwsafe, hide)
         else:
             # Find record
             record = utils.find_record(pwsafe, key)
-            print_record(record)
+            scripts.print_record(record, hide)
             clip_password(record.password)
     except scripts.ArgumentError as ex:
         if ex.show_help:

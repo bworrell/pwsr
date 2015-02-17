@@ -4,7 +4,6 @@ import collections
 import hashlib
 import struct
 import hmac
-import StringIO
 
 # external
 import mcrypt
@@ -245,35 +244,39 @@ class PWSafeV3Record(collections.MutableMapping):
     TYPE_TITLE      = 0x03
     TYPE_USERNAME   = 0x04
     TYPE_PASSWORD   = 0x06
+    TYPE_GROUP      = 0x02
 
     def __init__(self):
-        self.title = None
-        self.username = None
-        self.password = None
-
-        # used for type lookups and __len__ calculations
         self.__fields = {}
 
     @classmethod
     def parse(cls, data, offset=0):
         record = cls()
-        type = None
+        rtype  = None
 
-        while type != TYPE_END:
+        while rtype != TYPE_END:
             field = PwSafeV3Field.parse(data, offset)
-
-            if field.type == cls.TYPE_TITLE:
-                record.title = field
-            elif field.type == cls.TYPE_USERNAME:
-                record.username = field
-            elif field.type == cls.TYPE_PASSWORD:
-                record.password = field
-
             record[field.type] = field
             offset += len(field)
-            type = field.type
+            rtype = field.type
 
         return record
+
+    @property
+    def title(self):
+        return self.__fields[self.TYPE_TITLE]
+
+    @property
+    def group(self):
+        return self.__fields[self.TYPE_GROUP]
+
+    @property
+    def username(self):
+        return self.__fields[self.TYPE_USERNAME]
+
+    @property
+    def password(self):
+        return self.__fields[self.TYPE_PASSWORD]
 
     def __setitem__(self, key, value):
         self.__fields[key] = value
@@ -291,8 +294,9 @@ class PWSafeV3Record(collections.MutableMapping):
         return sum(len(f) for f in self.itervalues())
 
     def __unicode__(self):
-        s = "[{0}] u: {1} p: {2}".format(
+        s = "[{}] g: {} u: {} p: {}".format(
             self.title,
+            self.group,
             self.username,
             self.password
         )

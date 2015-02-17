@@ -8,6 +8,7 @@ import pwsr.utils as utils
 # Constants
 EXIT_SUCCESS = 0
 EXIT_FAILURE = 1
+HIDDEN_PASSWORD = "*" * 8
 DEFAULT_CONFIG_FN = utils.abspath("~/.pwsr/conf.json")
 
 class ArgumentError(Exception):
@@ -63,3 +64,19 @@ def error(msg, kill=False):
 
 def info(msg):
     print "[-]", str(msg)
+
+
+def print_record(record, hide=False):
+    title = record.title
+    group = record.group
+    username = record.username
+    password = record.password if not hide else HIDDEN_PASSWORD
+
+    out = "[{}] '{}' '{}' '{}'"
+    out = out.format(group, title, username, password)
+    print out
+
+
+def print_records(records, hide=False):
+    for record in sorted(records, key=lambda x: str(x.group)):
+        print_record(record, hide)
